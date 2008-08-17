@@ -2,7 +2,7 @@ package Authen::Quiz;
 #
 # Masatoshi Mizuno E<lt>lusheE<64>cpan.orgE<gt>
 #
-# $Id: Quiz.pm 357 2008-08-17 23:03:07Z lushe $
+# $Id: Quiz.pm 358 2008-08-17 23:14:35Z lushe $
 #
 use strict;
 use warnings;
@@ -20,7 +20,7 @@ if (my $error= $@) {
 	*load_quiz= sub { YAML::Syck::LoadFile( $_[0]->quiz_yaml ) };
 }
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 __PACKAGE__->mk_accessors(qw/ data_folder expire session_id session_file /);
 
@@ -63,7 +63,7 @@ sub question {
 		}
 		truncate $fh, 0;
 		seek $fh, 0, 0;
-		print QUIZ ($new_session || ''). "@{[ time ]}\t${sha1}\t${key}\n";
+		print $fh ($new_session || ''). "@{[ time ]}\t${sha1}\t${key}\n";
 	  });
 	$data->[0];
 }
