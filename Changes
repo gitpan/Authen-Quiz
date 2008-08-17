@@ -1,0 +1,5 @@
+Revision history for Perl extension .
+
+0.01  Sat Aug 16 23:00:52 2008
+	- original version; created by Egg::Helper::Build::Module v3.02
+	   with module name Authen::Quiz
