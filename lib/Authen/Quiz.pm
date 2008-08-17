@@ -2,7 +2,7 @@ package Authen::Quiz;
 #
 # Masatoshi Mizuno E<lt>lusheE<64>cpan.orgE<gt>
 #
-# $Id: Quiz.pm 356 2008-08-17 15:15:23Z lushe $
+# $Id: Quiz.pm 357 2008-08-17 23:03:07Z lushe $
 #
 use strict;
 use warnings;
@@ -20,22 +20,26 @@ if (my $error= $@) {
 	*load_quiz= sub { YAML::Syck::LoadFile( $_[0]->quiz_yaml ) };
 }
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
-__PACKAGE__->mk_accessors(qw/ data_folder expire session_id /);
+__PACKAGE__->mk_accessors(qw/ data_folder expire session_id session_file /);
 
 our $QuizYaml   = 'authen_quiz.yaml';
 our $QuizSession= 'authen_quiz_session.txt';
 
-sub quiz_yaml    { File::Spec->catfile( $_[0]->data_folder, $QuizYaml ) }
-sub session_file { File::Spec->catfile( $_[0]->data_folder, $QuizSession ) }
+sub quiz_yaml { File::Spec->catfile( $_[0]->data_folder, $QuizYaml ) }
 
 sub new {
 	my $class = shift;
 	my $option= $_[1] ? {@_}: ($_[0] || croak __PACKAGE__. ' - I want option.');
+	$option->{expire}      ||= 30;  ## minute.
 	$option->{data_folder} || die __PACKAGE__. " - 'data_folder' is empty.";
 	$option->{data_folder}=~s{[\\\/\:]+$} [];
-	$option->{expire} ||= 30;  ## minute.
+	$option->{session_file}= File::Spec->catfile($option->{data_folder}, $QuizSession);
+	-e $option->{session_file}
+	   || die __PACKAGE__. " - Session file is not found. : $option->{session_file}";
+	-w $option->{session_file}
+	   || die __PACKAGE__. " - I want write permission to session file.";
 	bless $option, $class;
 }
 sub question {
@@ -45,61 +49,80 @@ sub question {
 	my $data= $quiz->{$key} || croak __PACKAGE__. " - Quiz data is empty. [$key]";
 	   $data->[0] || croak __PACKAGE__. " - question data is empty. [$key]";
 	   $data->[1] || croak __PACKAGE__. " - answer data is empty. [$key]";
+	my $limit= $self->_limit_time;
 	my $sha1= $self->session_id(
 	   sha1_hex( ($ENV{REMOTE_ADDR} || '127.0.0.1'). time. $$. rand(1000). $data->[0] )
 	   );
-	open QUIZ, ">>@{[ $self->session_file ]}"  ## no critic.
-	     || die __PACKAGE__. " - File open error: @{[ $self->session_file ]}";
-	flock QUIZ, 2; # write lock.
-	print QUIZ time. "\t${sha1}\t${key}\n";
-	close QUIZ;
+	$self->_save(sub {
+		my($fh)= @_;
+		my $new_session;
+		for (<$fh>) {
+			my($T, $sha1, $key)= $self->_parse($_);
+			next if (! $T or $T< $limit);
+			$new_session.= $self->_session_line($T, $sha1, $key);
+		}
+		truncate $fh, 0;
+		seek $fh, 0, 0;
+		print QUIZ ($new_session || ''). "@{[ time ]}\t${sha1}\t${key}\n";
+	  });
 	$data->[0];
 }
 sub check_answer {
 	my $self   = shift;
 	my $sid    = shift || croak __PACKAGE__. ' - I want session id.';
 	my $answer = shift || croak __PACKAGE__. ' - I want answer.';
-	my $quiz   = $self->load_quiz;
-	my $limit  = time- ($self->expire* 60);
-	my($new_session, $result);
-	open QUIZ, "+<@{[ $self->session_file ]}"  ## no critic.
-	     || die __PACKAGE__. " - File open error: @{[ $self->session_file ]}";
-	flock QUIZ, 2; # write lock.
-	for (<QUIZ>) {
-		my($T, $sha1, $key)= /^(.+?)\t(.+?)\t([^\n]+)/;
-		next if (! $T or $T< $limit);
-		if ($sid eq $sha1) {
-			if (my $data= $quiz->{$key}) {
-				$result= 1 if ($data->[1] and $answer eq $data->[1]);
+	my($quiz, $limit)= ($self->load_quiz, $self->_limit_time);
+	my $result;
+	$self->_save(sub {
+		my($fh)= @_;
+		my $new_session;
+		for (<$fh>) {
+			my($T, $sha1, $key)= $self->_parse($_);
+			next if (! $T or $T< $limit);
+			if ($sid eq $sha1) {
+				if (my $data= $quiz->{$key}) {
+					$result= 1 if ($data->[1] and $answer eq $data->[1]);
+				}
+			} else {
+				$new_session.= $self->_session_line($T, $sha1, ${key});
 			}
-		} else {
-			$new_session.= "${T}\t${sha1}\t${key}\n";
 		}
-	}
-	truncate QUIZ, 0;
-	seek QUIZ, 0, 0;
-	print QUIZ ($new_session || "");
-	close QUIZ;
+		truncate $fh, 0;
+		seek $fh, 0, 0;
+		print $fh ($new_session || "");
+	  });
 	$result || 0;
 }
 sub remove_session {
-	my $self = shift;
-	my $limit= time- ($self->expire* 60);
+	my $self  = shift;
+	if (my $sid= shift) {
+		my $limit= time- ($self->expire* 60);
+		$self->_save(sub {
+			my($fh)= @_;
+			my @data= <$fh>;
+			truncate $fh, 0;
+			seek $fh, 0, 0;
+			for (@data) {
+				my($T, $sha1, $key)= $self->_parse($_);
+				next if (! $T or $T< $limit or $sid eq $sha1);
+				print $fh $self->_session_line($T, $sha1, $key);
+			}
+		  });
+	} else {
+		$self->_save(sub { truncate $_[0], 0 });
+	}
+	$self;
+}
+
+sub _parse        { $_[1] ? $_[1]=~m{^(.+?)\t(.+?)\t([^\n]+)}: '' }
+sub _session_line { "$_[1]\t$_[2]\t$_[3]\n" }
+sub _limit_time   { time- ($_[0]->expire* 60) }
+sub _save {
+	my($self, $code)= @_;
 	open QUIZ, "+<@{[ $self->session_file ]}"  ## no critic.
 	     || die __PACKAGE__. " - File open error: @{[ $self->session_file ]}";
 	flock QUIZ, 2; # write lock.
-	if (my $sid= shift) {
-		my @data= <QUIZ>;
-		truncate QUIZ, 0;
-		seek QUIZ, 0, 0;
-		for (@data) {
-			my($T, $sha1, $key)= /^(.+?)\t(.+?)\t([^\n]+)/;
-			next if (! $T or $T< $limit or $sid eq $sha1);
-			print QUIZ "${T}\t${sha1}\t${key}\n";
-		}
-	} else {
-		truncate QUIZ, 0;
-	}
+	$code->(*QUIZ);
 	close QUIZ;
 	$self;
 }

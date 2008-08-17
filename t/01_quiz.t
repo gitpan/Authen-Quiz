@@ -11,9 +11,11 @@ plan tests=> 33;
 
 my $temp= tempdir( CLEANUP => 1 );
 
-my $quiz_path= File::Spec->catfile($temp, $Authen::Quiz::QuizYaml);
+my $quiz_data   = File::Spec->catfile($temp, $Authen::Quiz::QuizYaml);
+my $quiz_session= File::Spec->catfile($temp, $Authen::Quiz::QuizSession);
 
-write_file($quiz_path, <DATA>);
+write_file($quiz_data, <DATA>);
+write_file($quiz_session, "");
 
 ok my $q= Authen::Quiz->new( data_folder=> $temp ), 'Constructor.';
 
