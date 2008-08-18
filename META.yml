@@ -26,4 +26,4 @@ requires:
   File::Spec: 0
   YAML: 0.66
   YAML::Syck: 1.05
-version: 0.03
+version: 0.04

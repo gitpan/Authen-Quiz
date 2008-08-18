@@ -2,7 +2,7 @@ package Authen::Quiz;
 #
 # Masatoshi Mizuno E<lt>lusheE<64>cpan.orgE<gt>
 #
-# $Id: Quiz.pm 358 2008-08-17 23:14:35Z lushe $
+# $Id: Quiz.pm 356 2008-08-17 15:15:23Z lushe $
 #
 use strict;
 use warnings;
@@ -20,7 +20,7 @@ if (my $error= $@) {
 	*load_quiz= sub { YAML::Syck::LoadFile( $_[0]->quiz_yaml ) };
 }
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 __PACKAGE__->mk_accessors(qw/ data_folder expire session_id session_file /);
 
@@ -35,7 +35,8 @@ sub new {
 	$option->{expire}      ||= 30;  ## minute.
 	$option->{data_folder} || die __PACKAGE__. " - 'data_folder' is empty.";
 	$option->{data_folder}=~s{[\\\/\:]+$} [];
-	$option->{session_file}= File::Spec->catfile($option->{data_folder}, $QuizSession);
+	$option->{session_file}=
+	   File::Spec->catfile($option->{data_folder}, $QuizSession);
 	-e $option->{session_file}
 	   || die __PACKAGE__. " - Session file is not found. : $option->{session_file}";
 	-w $option->{session_file}
@@ -45,14 +46,15 @@ sub new {
 sub question {
 	my($self)= @_;
 	my $quiz= $self->load_quiz;
-	my $key= do { my @list= keys %$quiz; $list[ int( rand(@list) ) ] };
-	my $data= $quiz->{$key} || croak __PACKAGE__. " - Quiz data is empty. [$key]";
-	   $data->[0] || croak __PACKAGE__. " - question data is empty. [$key]";
-	   $data->[1] || croak __PACKAGE__. " - answer data is empty. [$key]";
+	my $keynow= do { my @list= keys %$quiz; $list[ int( rand(@list) ) ] };
+	my $data= $quiz->{$keynow}
+	              || croak __PACKAGE__. " - Quiz data is empty. [$keynow]";
+	   $data->[0] || croak __PACKAGE__. " - question data is empty. [$keynow]";
+	   $data->[1] || croak __PACKAGE__. " - answer data is empty. [$keynow]";
 	my $limit= $self->_limit_time;
-	my $sha1= $self->session_id(
-	   sha1_hex( ($ENV{REMOTE_ADDR} || '127.0.0.1'). time. $$. rand(1000). $data->[0] )
-	   );
+	my $sha1now= $self->session_id( sha1_hex(
+	   ($ENV{REMOTE_ADDR} || '127.0.0.1'). time. $$. rand(1000). $data->[0]
+	   ) );
 	$self->_save(sub {
 		my($fh)= @_;
 		my $new_session;
@@ -63,7 +65,8 @@ sub question {
 		}
 		truncate $fh, 0;
 		seek $fh, 0, 0;
-		print $fh ($new_session || ''). "@{[ time ]}\t${sha1}\t${key}\n";
+		print $fh ($new_session || '')
+		        . $self->_session_line(time, $sha1now, $keynow);
 	  });
 	$data->[0];
 }
@@ -96,7 +99,7 @@ sub check_answer {
 sub remove_session {
 	my $self  = shift;
 	if (my $sid= shift) {
-		my $limit= time- ($self->expire* 60);
+		my $limit= $self->_limit_time;
 		$self->_save(sub {
 			my($fh)= @_;
 			my @data= <$fh>;
