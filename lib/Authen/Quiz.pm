@@ -2,7 +2,7 @@ package Authen::Quiz;
 #
 # Masatoshi Mizuno E<lt>lusheE<64>cpan.orgE<gt>
 #
-# $Id: Quiz.pm 356 2008-08-17 15:15:23Z lushe $
+# $Id: Quiz.pm 361 2008-08-18 18:29:46Z lushe $
 #
 use strict;
 use warnings;
@@ -13,14 +13,14 @@ use base qw/ Class::Accessor::Fast /;
 
 eval { require YAML::Syck; };  ## no critic.
 if (my $error= $@) {
-	$error=~m{Can\'t locate\s+YAML.+?Syck}i || die $error;
-	use YAML;
+	$error=~m{Can\'t\s+locate\s+YAML.+?Syck}i || die $error;
+	require YAML;
 	*load_quiz= sub { YAML::LoadFile( $_[0]->quiz_yaml ) };
 } else {
 	*load_quiz= sub { YAML::Syck::LoadFile( $_[0]->quiz_yaml ) };
 }
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 __PACKAGE__->mk_accessors(qw/ data_folder expire session_id session_file /);
 
@@ -116,7 +116,6 @@ sub remove_session {
 	}
 	$self;
 }
-
 sub _parse        { $_[1] ? $_[1]=~m{^(.+?)\t(.+?)\t([^\n]+)}: '' }
 sub _session_line { "$_[1]\t$_[2]\t$_[3]\n" }
 sub _limit_time   { time- ($_[0]->expire* 60) }
@@ -343,6 +342,8 @@ If the Wrapper module is made and cash is used, this can be solved.
   }
   
   1;
+
+Or, please use L<Authen::Quiz::Plugin::Memcached>.
 
 =head1 SEE ALSO
 

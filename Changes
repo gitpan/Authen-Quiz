@@ -1,5 +1,11 @@
 Revision history for Perl extension .
 
+0.05  2008/08/19
+	- bugfix for Authen::Quiz.
+	- Authen::Quiz::FW module is added.
+	- Authen::Quiz::JS module is added.
+	- Authen::Quiz::Memcached module is added.
+
 0.04  2008/08/18
 	- bugfix for Authen::Quiz.
 

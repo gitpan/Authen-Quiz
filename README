@@ -21,6 +21,10 @@ INSTALLATION
    make test
    make install
 
+  * Please set the following environment variable when you test Authen::Quiz::Plugin::Memcached.
+     AUTHEN_QUIZ_MEMCACHED_SERVER = Internet Protocol address of server where Memcached moves.
+     AUTHEN_QUIZ_MEMCACHED_PORT   = Port number that the Memcached uses.
+
 2. Preparation for data file.
 
    % cp -r ./eg/authen_quiz /path/to/myapp

@@ -21,9 +21,14 @@ no_index:
     - inc
     - t
 requires:
-  Class::Accessor::First: 0.31
+  Cache::Memcached: 0.66
+  Cache::Memcached::Fast: 0.66
+  Class::Accessor::Fast: 0.31
+  Class::C3: 0.66
   Digest::SHA1: 2.11
   File::Spec: 0
+  Jcode: 0.66
+  UNIVERSAL::require: 0.66
   YAML: 0.66
   YAML::Syck: 1.05
-version: 0.04
+version: 0.05
